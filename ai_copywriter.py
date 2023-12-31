@@ -5,7 +5,8 @@ from openai import OpenAI
 
 st.title("✍️ AI_카피라이터")
 st.subheader("AI를 이용하여 손쉽게 마케팅 문구를 생성해보세요.")
-client = OpenAI(api_key=st.secrets["api_key"])
+client = OpenAI.api_key="api_key"
+#client = OpenAI(api_key=st.secrets["api_key"])
 
 def request_chat_completion(prompt):
     response = client.chat.completions.create(
