@@ -1,164 +1,110 @@
+import os
 import streamlit as st
+from openai import OpenAI
 
 
-st.set_page_config(
-    page_title="포켓몬 도감",
-    page_icon="./images/monsterball.png"
-)
-st.markdown("""
-<style>
-img { 
-    max-height: 300px;
-}
-.streamlit-expanderContent div {
-    display: flex;
-    justify-content: center;
-    font-size: 20px;
-}
-[data-testid="stExpanderToggleIcon"] {
-    visibility: hidden;
-}
-.streamlit-expanderHeader {
-    pointer-events: none;
-}
-[data-testid="StyledFullScreenButton"] {
-    visibility: hidden;
-}
-</style>
-""", unsafe_allow_html=True)
+st.title("✍️ AI_카피라이터")
+st.subheader("AI를 이용하여 손쉽게 마케팅 문구를 생성해보세요.")
+client = OpenAI(api_key=st.secrets["api_key"])
+
+def request_chat_completion(prompt):
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "당신은 전문 카피라이터입니다."},
+            {"role": "user", "content": prompt}
+        ],
+        stream=True
+    )
+    return response
 
 
-st.title("포켓몬 도감")
-st.markdown("**포켓몬**을 하나씩 추가해서 도감을 채워보세요!")
+def print_streaming_response(response):
+    message = ""
+    placeholder = st.empty()
+    for chunk in response:
+        delta = chunk.choices[0].delta
+        if delta.content:
+            message += delta.content
+            placeholder.markdown(message + "▌")
+    placeholder.markdown(message)
 
-type_emoji_dict = {
-    "노말": "⚪",
-    "격투": "✊",
-    "비행": "🕊",
-    "독": "☠️",
-    "땅": "🌋",
-    "바위": "🪨",
-    "벌레": "🐛",
-    "고스트": "👻",
-    "강철": "🤖",
-    "불꽃": "🔥",
-    "물": "💧",
-    "풀": "🍃",
-    "전기": "⚡",
-    "에스퍼": "🔮",
-    "얼음": "❄️",
-    "드래곤": "🐲",
-    "악": "😈",
-    "페어리": "🧚"
-}
 
-initial_pokemons = [
-    {
-        "name": "피카츄",
-        "types": ["전기"],
-        "image_url": "https://storage.googleapis.com/firstpenguine-coding-school/pokemons/pikachu.webp"
-    },
-    {
-        "name": "누오",
-        "types": ["물", "땅"],
-        "image_url": "https://storage.googleapis.com/firstpenguine-coding-school/pokemons/nuo.webp",
-    },
-    {
-        "name": "갸라도스",
-        "types": ["물", "비행"],
-        "image_url": "https://storage.googleapis.com/firstpenguine-coding-school/pokemons/garados.webp",
-    },
-    {
-        "name": "개굴닌자",
-        "types": ["물", "악"],
-        "image_url": "https://storage.googleapis.com/firstpenguine-coding-school/pokemons/frogninja.webp"
-    },
-    {
-        "name": "루카리오",
-        "types": ["격투", "강철"],
-        "image_url": "https://storage.googleapis.com/firstpenguine-coding-school/pokemons/lukario.webp"
-    },
-    {
-        "name": "에이스번",
-        "types": ["불꽃"],
-        "image_url": "https://storage.googleapis.com/firstpenguine-coding-school/pokemons/acebun.webp"
-    },
-]
+def generate_prompt(product_name, product_desc, num, max_length, keywords):
+    prompt = f"""
+제품 혹은 브랜드를 SNS에 광고하기 위한 문구를 {num}개 생성해주세요.
+자극적이고 창의적으로 작성하세요.
+명사 위주로 간결하게 작성하세요.
+반드시 {max_length} 단어 이내로 작성해주세요.
+키워드가 주어질 경우, 반드시 키워드 중 하나를 포함해야 합니다.
+문장을 명사로 끝내세요.
+2가지 종류 이상 이모지를 사용하세요.
+---
+제품명: {product_name}
+제품설명: {product_desc}
+키워드: {keywords}
+---
+""".strip()
+    return prompt
 
-example_pokemon = {
-    "name": "알로라 디그다",
-    "types": ["땅", "강철"],
-    "image_url": "https://storage.googleapis.com/firstpenguine-coding-school/pokemons/alora_digda.webp"
-}
 
-print("page reload")
-
-if "pokemons" not in st.session_state:          #변화된 상태가 유지하는 기능
-    st.session_state.pokemons = initial_pokemons
-
-auto_complete = st.toggle("예시 데이터로 채워 볼까요?")
-
-with st.form(key="form"):
-    col1, col2 = st.columns(2)
+auto_complete = st.toggle(label="예시로 채우기")
+with st.form("form"):
+    col1, col2, col3 = st.columns(3)
     with col1:
+        example_brand = "카누"
         name = st.text_input(
-            label="포켓몬 이름",
-            value=example_pokemon["name"] if auto_complete else ""
+            label="제품/브랜드 이름(필수)",
+            value=example_brand if auto_complete else "",
+            placeholder=example_brand
         )
     with col2:
-        types = st.multiselect(
-            label="포켓몬 속성",
-            options=list(type_emoji_dict.keys()),
-            max_selections=2,
-            default=example_pokemon["types"] if auto_complete else []
-        )
-    image_url = st.text_input(
-        label="포켓몬 이미지 URL",
-        value=example_pokemon["image_url"] if auto_complete else ""
+        max_length = st.number_input("최대 단어 수", min_value=5, max_value=20, step=1, value=10)
+    with col3:
+        num = st.number_input("생성할 문구 수", min_value=1, max_value=10, step=1, value=5)
+    example_desc = "집에서도 카페 느낌의 아메리카노 맛이 나는 커피 믹스"
+    desc = st.text_input(
+        label="제품 간단 정보(필수)",
+        value=example_desc if auto_complete else "",
+        placeholder=example_desc
     )
-    submit = st.form_submit_button(label="Submit")
-    if submit:
-        if not name:
-            st.error("포켓몬의 이름을 입력해주세요.")
-        elif len(types) == 0:
-            st.error("포켓몬의 속성을 적어도 한개 선택해주세요.")
-        else:
-            st.success("포켓몬을 추가할 수 있습니다.")
-            st.session_state.pokemons.append({
-                "name": name,
-                "types": types,
-                "image_url": image_url if image_url else "./images/default.png"
-            })
 
-
-for i in range(0, len(st.session_state.pokemons), 3):
-    row_pokemons = st.session_state.pokemons[i:i+3]
-    cols = st.columns(3)
-    for j in range(len(row_pokemons)):
-        with cols[j]:
-            pokemon = row_pokemons[j]
-            with st.expander(label=f"**{i+j+1}. {pokemon['name']}**", expanded=True):
-                st.image(pokemon["image_url"])
-                emoji_types = [f"{type_emoji_dict[x]} {x}" for x in pokemon["types"]]
-                st.text(" / ".join(emoji_types))
-                delete_button = st.button(label="삭제", key=i+j, use_container_width=True)
-                if delete_button:
-                    del st.session_state.pokemons[i+j]
-                    st.rerun()
-
-#---------------------------------------------------------------------------
-st.image(pokemon["image_url"])
-for i in range(0, len(st.session_state.pokemons), 3):
-    row_pokemons = st.session_state.pokemons[i:i+3]
-    cols = st.columns(3)
-    for j in range(len(row_pokemons)):
-        with cols[j]:
-            pokemon = row_pokemons[j]
-            with st.expander(label=f"**{i+j+1}. {pokemon['name']}**", expanded=True):
-                st.image(pokemon["image_url"])
-
-
-
-st.title("streamlit 강력한 기능을 가졌네요")
-st.markdown("마리가 지끈지끈 아픕니다")
-st.image(pokemon["image_url"])
+    st.text("포함할 키워드(최대 3개까지 허용)")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        example_keyword_one = "브라질"
+        keyword_one = st.text_input(
+            label="keyword_1",
+            label_visibility="collapsed",
+            placeholder=example_keyword_one,
+            value=example_keyword_one if auto_complete else ""
+        )
+    with col2:
+        example_keyword_two = "카페"
+        keyword_two = st.text_input(
+            label="keyword_2",
+            label_visibility="collapsed",
+            placeholder=example_keyword_two,
+            value=example_keyword_two if auto_complete else ""
+        )
+    with col3:
+        example_keyword_three = "공유"
+        keyword_three = st.text_input(
+            label="keyword_3",
+            label_visibility="collapsed",
+            placeholder=example_keyword_three,
+            value=example_keyword_three if auto_complete else ""
+        )
+    submitted = st.form_submit_button("제출하기")
+if submitted:
+    if not name:
+        st.error("브랜드 혹은 제품의 이름을 입력해주세요")
+    elif not desc:
+        st.error("제품의 간단한 정보를 입력해주세요")
+    else:
+        with st.spinner('AI 카피라이터가 광고 문구를 생성 중입니다...'):
+            keywords = [keyword_one, keyword_two, keyword_three]
+            keywords = [x for x in keywords if x]
+            prompt = generate_prompt(name, desc, num, max_length, keywords)
+            response = request_chat_completion(prompt)
+        print_streaming_response(response)
